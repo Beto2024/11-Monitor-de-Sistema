@@ -6,12 +6,20 @@ Coleta métricas de CPU, RAM e Disco em tempo real usando psutil.
 import json
 import time
 import threading
+import platform
 from collections import deque
 from datetime import datetime
 
 import psutil
 from flask import Flask, jsonify, render_template, request
 from flask_socketio import SocketIO
+
+# Tenta importar WMI (disponível apenas no Windows)
+try:
+    import wmi
+    WMI_DISPONIVEL = True
+except ImportError:
+    WMI_DISPONIVEL = False
 
 # ---------------------------------------------------------------------------
 # Configuração da aplicação
@@ -104,9 +112,147 @@ def coletar_metricas_disco():
     return particoes
 
 
+def coletar_info_hardware():
+    """Coleta informações detalhadas de hardware: CPU, RAM e Disco.
+
+    Usa WMI no Windows para obter dados precisos (tipo DDR, modelo NVMe, etc.).
+    Em Linux/Mac, utiliza platform e psutil como fallback.
+    Esta função deve ser chamada uma única vez na inicialização.
+    """
+    info = {
+        "cpu": {"nome": "Desconhecido", "fabricante": "Desconhecido"},
+        "ram": {"tipo": "Desconhecido", "velocidade": "—", "slots": []},
+        "discos": [],
+    }
+
+    if WMI_DISPONIVEL:
+        # ── Windows: detecção via WMI ────────────────────────────────────────
+        try:
+            c = wmi.WMI()
+
+            # CPU
+            for proc in c.Win32_Processor():
+                nome = proc.Name.strip() if proc.Name else "Desconhecido"
+                fabricante = "Intel" if "Intel" in nome else ("AMD" if "AMD" in nome else "Desconhecido")
+                info["cpu"] = {"nome": nome, "fabricante": fabricante}
+                break  # usa apenas o primeiro processador
+
+            # RAM — mapeamento de SMBIOSMemoryType para nome do padrão DDR
+            TIPOS_RAM = {
+                0: "Desconhecido", 20: "DDR", 21: "DDR2",
+                24: "DDR3", 26: "DDR4", 34: "DDR5",
+            }
+            slots = []
+            for modulo in c.Win32_PhysicalMemory():
+                tipo_id = int(modulo.SMBIOSMemoryType or 0)
+                tipo_nome = TIPOS_RAM.get(tipo_id, "Desconhecido")
+                velocidade = int(modulo.Speed or 0)
+                capacidade_gb = round(int(modulo.Capacity or 0) / (1024 ** 3), 1)
+                slots.append({
+                    "capacidade_gb": capacidade_gb,
+                    "velocidade": velocidade,
+                    "tipo": tipo_nome,
+                })
+            if slots:
+                # Usa o tipo e velocidade do primeiro módulo como representativo
+                tipo_rep = slots[0]["tipo"]
+                vel_rep = slots[0]["velocidade"]
+                info["ram"] = {
+                    "tipo": tipo_rep,
+                    "velocidade": f"{vel_rep} MHz" if vel_rep else "—",
+                    "slots": slots,
+                }
+
+            # Discos físicos
+            for drive in c.Win32_DiskDrive():
+                modelo = (drive.Model or "").strip()
+                interface = (drive.InterfaceType or "").strip()
+                tamanho = int(drive.Size or 0)
+                tamanho_gb = round(tamanho / (1024 ** 3), 1) if tamanho else 0.0
+
+                # Detecta tipo de armazenamento pelo modelo
+                modelo_upper = modelo.upper()
+                if "NVME" in modelo_upper:
+                    tipo_disco = "NVMe SSD"
+                elif "SSD" in modelo_upper:
+                    tipo_disco = "SSD SATA"
+                else:
+                    tipo_disco = "HDD SATA"
+
+                info["discos"].append({
+                    "modelo": modelo,
+                    "tipo": tipo_disco,
+                    "interface": interface,
+                    "tamanho_gb": tamanho_gb,
+                })
+
+        except Exception as exc:
+            # Falha silenciosa — mantém valores padrão; registra para diagnóstico
+            app.logger.warning("Falha ao coletar hardware via WMI: %s", exc)
+
+    else:
+        # ── Fallback cross-platform (Linux / macOS) ──────────────────────────
+        nome_cpu = platform.processor() or "Desconhecido"
+        fabricante = "Intel" if "Intel" in nome_cpu else ("AMD" if "AMD" in nome_cpu else "Desconhecido")
+        info["cpu"] = {"nome": nome_cpu, "fabricante": fabricante}
+
+        # RAM: psutil não fornece tipo DDR — exibe capacidade total apenas
+        mem = psutil.virtual_memory()
+        info["ram"] = {
+            "tipo": "Desconhecido",
+            "velocidade": "—",
+            "slots": [{"capacidade_gb": round(mem.total / (1024 ** 3), 1), "velocidade": 0, "tipo": "Desconhecido"}],
+        }
+
+        # Discos: tenta identificar NVMe pelo nome do dispositivo
+        try:
+            import subprocess
+            resultado = subprocess.run(
+                ["lsblk", "-d", "-o", "NAME,ROTA,MODEL", "--noheadings"],
+                capture_output=True, text=True, timeout=3
+            )
+            for linha in resultado.stdout.strip().splitlines():
+                partes = linha.split(None, 2)
+                if len(partes) >= 2:
+                    nome_dev = partes[0]
+                    rotacional = partes[1]
+                    modelo = partes[2].strip() if len(partes) > 2 else nome_dev
+                    nome_upper = nome_dev.upper()
+                    modelo_upper = modelo.upper()
+                    if "NVME" in nome_upper or "NVME" in modelo_upper:
+                        tipo_disco = "NVMe SSD"
+                    elif rotacional == "0":
+                        tipo_disco = "SSD SATA"
+                    else:
+                        tipo_disco = "HDD SATA"
+                    info["discos"].append({
+                        "modelo": modelo,
+                        "tipo": tipo_disco,
+                        "interface": "NVMe" if "NVME" in nome_upper else "SATA",
+                        "tamanho_gb": 0.0,
+                    })
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass  # lsblk não disponível nesta plataforma
+        except Exception as exc:
+            app.logger.warning("Falha ao detectar discos via lsblk: %s", exc)
+
+    return info
+
+
+# Coleta de hardware uma única vez na inicialização (evita impacto a cada 2s)
+_cache_hardware = None
+
+
+def obter_info_hardware():
+    """Retorna o cache de hardware, coletando na primeira chamada."""
+    global _cache_hardware
+    if _cache_hardware is None:
+        _cache_hardware = coletar_info_hardware()
+    return _cache_hardware
+
+
 def coletar_info_sistema():
     """Coleta informações gerais do sistema: hostname, OS e uptime."""
-    import platform
     import socket
 
     tempo_boot = psutil.boot_time()
@@ -156,6 +302,7 @@ def coletar_todas_metricas():
         "disco": coletar_metricas_disco(),
         "sistema": coletar_info_sistema(),
         "processos": coletar_top_processos(),
+        "hardware": obter_info_hardware(),
     }
     return metricas
 

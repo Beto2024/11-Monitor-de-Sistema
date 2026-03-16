@@ -2,3 +2,7 @@ Flask==3.0.3
 Flask-SocketIO==5.3.6
 psutil==5.9.8
 eventlet==0.36.1
+
+# Dependências opcionais para detecção avançada de hardware (Windows)
+# wmi==1.5.1
+# pywin32==306

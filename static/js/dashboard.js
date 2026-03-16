@@ -107,6 +107,7 @@ function atualizarDashboard(dados) {
   atualizarDisco(dados.disco);
   atualizarSistema(dados.sistema);
   atualizarProcessos(dados.processos);
+  atualizarHardware(dados.hardware);
 
   // Adiciona ponto ao histórico dos gráficos
   const ts = new Date(dados.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -171,6 +172,9 @@ function atualizarRAM(ram) {
 }
 
 // ── Disco ─────────────────────────────────────────────────────
+// Armazena info de hardware de disco para enriquecer a lista de partições
+let _hardwareDiscos = [];
+
 function atualizarDisco(particoes) {
   if (!particoes?.length) return;
 
@@ -189,12 +193,19 @@ function atualizarDisco(particoes) {
   card?.classList.toggle('alert-active', alerta);
   if (badge) badge.classList.toggle('visible', alerta);
 
-  // Lista de todas as partições
+  // Lista de todas as partições, com tipo de armazenamento se disponível
   const listaEl = document.getElementById('disk-partitions');
   if (listaEl) {
-    listaEl.innerHTML = particoes.map(p => `
+    // Tenta associar o primeiro drive físico com as partições (heurística simples:
+    // usa o drive[0] para todas as partições, pois psutil não mapeia partição→drive)
+    const driveInfo = _hardwareDiscos.length > 0 ? _hardwareDiscos[0] : null;
+    const tipoLabel = driveInfo ? ` · <span style="color:var(--disk-light);">${escapeHtml(driveInfo.tipo)}</span>` : '';
+    const modeloLabel = driveInfo ? `<div style="font-size:0.75rem;color:var(--text-sec);margin-top:0.15rem;">${escapeHtml(driveInfo.modelo || '')}</div>` : '';
+
+    listaEl.innerHTML = particoes.map((p, idx) => `
       <div class="metric-detail-item" style="grid-column: span 2;">
-        <div class="detail-label">${p.ponto_montagem} (${p.sistema_arquivos || 'N/A'})</div>
+        <div class="detail-label">${escapeHtml(p.ponto_montagem)} (${escapeHtml(p.sistema_arquivos || 'N/A')})${idx === 0 ? tipoLabel : ''}</div>
+        ${idx === 0 ? modeloLabel : ''}
         <div class="detail-value" style="margin-bottom:0.25rem">
           ${p.usado_gb} GB / ${p.total_gb} GB (${p.percentual}%)
         </div>
@@ -205,6 +216,34 @@ function atualizarDisco(particoes) {
       </div>
     `).join('');
   }
+}
+
+// ── Hardware detalhado ────────────────────────────────────────
+function atualizarHardware(hardware) {
+  if (!hardware) return;
+
+  // Processador — sysinfo card
+  const cpuNome = hardware.cpu?.nome ?? '—';
+  const cpuFabricante = hardware.cpu?.fabricante ?? '';
+  const cpuLabel = cpuNome !== 'Desconhecido'
+    ? cpuNome
+    : (cpuFabricante !== 'Desconhecido' ? cpuFabricante : '—');
+  setText('sys-cpu-name', cpuLabel);
+
+  // Modelo do processador no card de CPU
+  setText('cpu-hw-name', cpuLabel);
+
+  // RAM — sysinfo card e detalhe no card de RAM
+  const ramTipo = hardware.ram?.tipo ?? 'Desconhecido';
+  const ramVel  = hardware.ram?.velocidade ?? '—';
+  const ramLabel = ramTipo !== 'Desconhecido'
+    ? (ramVel !== '—' ? `${ramTipo} • ${ramVel}` : ramTipo)
+    : '—';
+  setText('sys-ram-type', ramLabel);
+  setText('ram-hw-type',  ramLabel);
+
+  // Discos — armazena para enriquecer a lista de partições
+  _hardwareDiscos = hardware.discos ?? [];
 }
 
 // ── Sistema ───────────────────────────────────────────────────

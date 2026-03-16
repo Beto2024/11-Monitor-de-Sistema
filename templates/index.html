@@ -77,6 +77,20 @@
           <div class="sysinfo-value" id="sys-uptime">—</div>
         </div>
       </div>
+      <div class="sysinfo-card">
+        <span class="sysinfo-icon">🔲</span>
+        <div class="sysinfo-info">
+          <div class="sysinfo-label">Processador</div>
+          <div class="sysinfo-value" id="sys-cpu-name">—</div>
+        </div>
+      </div>
+      <div class="sysinfo-card">
+        <span class="sysinfo-icon">🧩</span>
+        <div class="sysinfo-info">
+          <div class="sysinfo-label">Memória</div>
+          <div class="sysinfo-value" id="sys-ram-type">—</div>
+        </div>
+      </div>
     </div>
 
     <!-- ── Cards de métricas ─────────────────────────────────── -->
@@ -120,6 +134,10 @@
             <span class="detail-label">Frequência</span>
             <span class="detail-value" id="cpu-freq">—</span>
           </div>
+          <div class="metric-detail-item" style="grid-column: span 2;">
+            <span class="detail-label">Modelo</span>
+            <span class="detail-value" id="cpu-hw-name" style="font-size:0.8rem; word-break:break-word;">—</span>
+          </div>
         </div>
         <!-- Uso por core -->
         <div id="cpu-cores-list" class="cores-grid" style="margin-top:0.75rem;"></div>
@@ -161,6 +179,10 @@
           <div class="metric-detail-item" style="grid-column: span 2;">
             <span class="detail-label">Disponível</span>
             <span class="detail-value" id="ram-free">—</span>
+          </div>
+          <div class="metric-detail-item" style="grid-column: span 2;">
+            <span class="detail-label">Tipo</span>
+            <span class="detail-value" id="ram-hw-type">—</span>
           </div>
         </div>
       </div>
