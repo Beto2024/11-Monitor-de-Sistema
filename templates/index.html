@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Monitor de Sistema</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+
+  <!-- SVG gradient definitions (usadas pelos gauges) -->
+  <svg width="0" height="0" style="position:absolute">
+    <defs>
+      <linearGradient id="grad-cpu" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%"   stop-color="#f59e0b"/>
+        <stop offset="100%" stop-color="#fbbf24"/>
+      </linearGradient>
+      <linearGradient id="grad-ram" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%"   stop-color="#a855f7"/>
+        <stop offset="100%" stop-color="#8b5cf6"/>
+      </linearGradient>
+      <linearGradient id="grad-disk" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%"   stop-color="#ec4899"/>
+        <stop offset="100%" stop-color="#d946ef"/>
+      </linearGradient>
+    </defs>
+  </svg>
+</head>
+
+<body>
+  <!-- ── Header ─────────────────────────────────────────────── -->
+  <header>
+    <div class="header-inner">
+      <div class="header-title">
+        <span class="icon">📡</span>
+        <h1>Monitor de Sistema</h1>
+      </div>
+      <div class="header-right">
+        <div class="connection-status">
+          <div class="connection-dot" id="conn-dot"></div>
+          <span id="conn-text">Conectando…</span>
+        </div>
+        <span class="badge-status">Em Desenvolvimento</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── Conteúdo principal ─────────────────────────────────── -->
+  <main class="container">
+
+    <!-- ── Informações do sistema ────────────────────────────── -->
+    <p class="section-title">🖥️ Informações do Sistema</p>
+    <div class="sysinfo-grid">
+      <div class="sysinfo-card">
+        <span class="sysinfo-icon">🏷️</span>
+        <div class="sysinfo-info">
+          <div class="sysinfo-label">Hostname</div>
+          <div class="sysinfo-value" id="sys-hostname">—</div>
+        </div>
+      </div>
+      <div class="sysinfo-card">
+        <span class="sysinfo-icon">🐧</span>
+        <div class="sysinfo-info">
+          <div class="sysinfo-label">Sistema Operacional</div>
+          <div class="sysinfo-value" id="sys-os">—</div>
+        </div>
+      </div>
+      <div class="sysinfo-card">
+        <span class="sysinfo-icon">⚙️</span>
+        <div class="sysinfo-info">
+          <div class="sysinfo-label">Arquitetura</div>
+          <div class="sysinfo-value" id="sys-arch">—</div>
+        </div>
+      </div>
+      <div class="sysinfo-card">
+        <span class="sysinfo-icon">⏱️</span>
+        <div class="sysinfo-info">
+          <div class="sysinfo-label">Uptime</div>
+          <div class="sysinfo-value" id="sys-uptime">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Cards de métricas ─────────────────────────────────── -->
+    <p class="section-title">📊 Métricas em Tempo Real</p>
+    <div class="metrics-grid">
+
+      <!-- Card CPU -->
+      <div class="metric-card cpu" id="card-cpu">
+        <div class="card-header">
+          <div class="card-title">
+            <span class="card-icon">🔥</span> CPU
+          </div>
+          <span class="alert-badge" id="badge-cpu">ALERTA</span>
+        </div>
+        <div class="gauge-wrapper">
+          <div class="gauge-container">
+            <svg class="gauge-svg" viewBox="0 0 140 140">
+              <circle class="gauge-track" cx="70" cy="70" r="56"/>
+              <circle class="gauge-fill cpu" id="gauge-fill-cpu"
+                      cx="70" cy="70" r="56"
+                      stroke-dasharray="351.86"
+                      stroke-dashoffset="351.86"/>
+            </svg>
+            <div class="gauge-center">
+              <div class="gauge-value cpu" id="gauge-val-cpu">0%</div>
+              <div class="gauge-unit">uso</div>
+            </div>
+          </div>
+          <div class="detail-value cpu" style="font-size:1rem;" id="cpu-pct">0%</div>
+        </div>
+        <div class="metric-details">
+          <div class="metric-detail-item">
+            <span class="detail-label">Núcleos Lógicos</span>
+            <span class="detail-value" id="cpu-cores-logic">—</span>
+          </div>
+          <div class="metric-detail-item">
+            <span class="detail-label">Núcleos Físicos</span>
+            <span class="detail-value" id="cpu-cores-phys">—</span>
+          </div>
+          <div class="metric-detail-item" style="grid-column: span 2;">
+            <span class="detail-label">Frequência</span>
+            <span class="detail-value" id="cpu-freq">—</span>
+          </div>
+        </div>
+        <!-- Uso por core -->
+        <div id="cpu-cores-list" class="cores-grid" style="margin-top:0.75rem;"></div>
+      </div>
+
+      <!-- Card RAM -->
+      <div class="metric-card ram" id="card-ram">
+        <div class="card-header">
+          <div class="card-title">
+            <span class="card-icon">💾</span> Memória RAM
+          </div>
+          <span class="alert-badge" id="badge-ram">ALERTA</span>
+        </div>
+        <div class="gauge-wrapper">
+          <div class="gauge-container">
+            <svg class="gauge-svg" viewBox="0 0 140 140">
+              <circle class="gauge-track" cx="70" cy="70" r="56"/>
+              <circle class="gauge-fill ram" id="gauge-fill-ram"
+                      cx="70" cy="70" r="56"
+                      stroke-dasharray="351.86"
+                      stroke-dashoffset="351.86"/>
+            </svg>
+            <div class="gauge-center">
+              <div class="gauge-value ram" id="gauge-val-ram">0%</div>
+              <div class="gauge-unit">uso</div>
+            </div>
+          </div>
+          <div class="detail-value ram" style="font-size:1rem;" id="ram-pct">0%</div>
+        </div>
+        <div class="metric-details">
+          <div class="metric-detail-item">
+            <span class="detail-label">Total</span>
+            <span class="detail-value" id="ram-total">—</span>
+          </div>
+          <div class="metric-detail-item">
+            <span class="detail-label">Usada</span>
+            <span class="detail-value" id="ram-used">—</span>
+          </div>
+          <div class="metric-detail-item" style="grid-column: span 2;">
+            <span class="detail-label">Disponível</span>
+            <span class="detail-value" id="ram-free">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card Disco -->
+      <div class="metric-card disk" id="card-disk">
+        <div class="card-header">
+          <div class="card-title">
+            <span class="card-icon">🗄️</span> Disco
+          </div>
+          <span class="alert-badge" id="badge-disk">ALERTA</span>
+        </div>
+        <div class="gauge-wrapper">
+          <div class="gauge-container">
+            <svg class="gauge-svg" viewBox="0 0 140 140">
+              <circle class="gauge-track" cx="70" cy="70" r="56"/>
+              <circle class="gauge-fill disk" id="gauge-fill-disk"
+                      cx="70" cy="70" r="56"
+                      stroke-dasharray="351.86"
+                      stroke-dashoffset="351.86"/>
+            </svg>
+            <div class="gauge-center">
+              <div class="gauge-value disk" id="gauge-val-disk">0%</div>
+              <div class="gauge-unit">uso</div>
+            </div>
+          </div>
+          <div class="detail-value disk" style="font-size:1rem;" id="disk-pct">0%</div>
+        </div>
+        <div class="metric-details">
+          <div class="metric-detail-item">
+            <span class="detail-label">Total</span>
+            <span class="detail-value" id="disk-total">—</span>
+          </div>
+          <div class="metric-detail-item">
+            <span class="detail-label">Usado</span>
+            <span class="detail-value" id="disk-used">—</span>
+          </div>
+          <div class="metric-detail-item" style="grid-column: span 2;">
+            <span class="detail-label">Livre</span>
+            <span class="detail-value" id="disk-free">—</span>
+          </div>
+        </div>
+        <!-- Partições -->
+        <div id="disk-partitions" class="metric-details" style="margin-top:0.75rem;gap:0.75rem;"></div>
+      </div>
+
+    </div><!-- /metrics-grid -->
+
+    <!-- ── Gráficos de histórico ─────────────────────────────── -->
+    <p class="section-title">📈 Histórico (últimos 2 minutos)</p>
+    <div class="charts-grid">
+      <div class="chart-card">
+        <h3>🔥 CPU (%)</h3>
+        <canvas id="chart-cpu"></canvas>
+      </div>
+      <div class="chart-card">
+        <h3>💾 RAM (%)</h3>
+        <canvas id="chart-ram"></canvas>
+      </div>
+      <div class="chart-card">
+        <h3>🗄️ Disco (%)</h3>
+        <canvas id="chart-disk"></canvas>
+      </div>
+    </div>
+
+    <!-- ── Alertas ────────────────────────────────────────────── -->
+    <p class="section-title">🔔 Alertas</p>
+    <div class="alerts-section">
+
+      <!-- Configuração de thresholds -->
+      <div class="alerts-config-card">
+        <h3>⚙️ Configurar Thresholds</h3>
+
+        <div class="threshold-group">
+          <div class="threshold-header">
+            <span class="threshold-label" style="color: var(--cpu-light);">🔥 CPU</span>
+            <span class="threshold-value" style="color: var(--cpu-light);" id="val-cpu">80%</span>
+          </div>
+          <input type="range" min="0" max="100" value="80"
+                 class="threshold-slider cpu" id="slider-cpu" />
+        </div>
+
+        <div class="threshold-group">
+          <div class="threshold-header">
+            <span class="threshold-label" style="color: var(--ram-light);">💾 RAM</span>
+            <span class="threshold-value" style="color: var(--ram-light);" id="val-ram">80%</span>
+          </div>
+          <input type="range" min="0" max="100" value="80"
+                 class="threshold-slider ram" id="slider-ram" />
+        </div>
+
+        <div class="threshold-group">
+          <div class="threshold-header">
+            <span class="threshold-label" style="color: var(--disk-light);">🗄️ Disco</span>
+            <span class="threshold-value" style="color: var(--disk-light);" id="val-disk">80%</span>
+          </div>
+          <input type="range" min="0" max="100" value="80"
+                 class="threshold-slider disk" id="slider-disk" />
+        </div>
+
+        <button class="btn-salvar-alertas btn-save-alerts" id="btn-salvar-alertas">
+          💾 Salvar Alertas
+        </button>
+      </div>
+
+      <!-- Alertas ativos -->
+      <div class="alerts-active-card">
+        <h3>⚠️ Alertas Ativos</h3>
+        <div class="alert-list" id="alertas-lista">
+          <div class="alert-empty">
+            <span>✅</span> Nenhum alerta no momento
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /alerts-section -->
+
+    <!-- ── Top processos ─────────────────────────────────────── -->
+    <p class="section-title">⚡ Top Processos por CPU</p>
+    <div class="processes-card">
+      <table class="processes-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Processo</th>
+            <th>PID</th>
+            <th>CPU</th>
+            <th>RAM</th>
+          </tr>
+        </thead>
+        <tbody id="proc-tbody">
+          <tr>
+            <td colspan="5" style="text-align:center; color:var(--text-sec); padding:1rem;">
+              Carregando processos…
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+  </main><!-- /container -->
+
+  <footer>
+    <p>Monitor de Sistema &mdash; Feito com 💜 usando Python, Flask, Socket.IO &amp; psutil</p>
+    <p style="margin-top:0.25rem;">
+      <a href="https://github.com/Beto2024/11-Monitor-de-Sistema" target="_blank" rel="noopener">
+        GitHub
+      </a>
+    </p>
+  </footer>
+
+  <!-- Chart.js via CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <!-- Socket.IO -->
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <!-- Lógica do dashboard -->
+  <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>
