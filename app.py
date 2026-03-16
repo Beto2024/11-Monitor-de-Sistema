@@ -463,11 +463,11 @@ def ao_solicitar_historico():
 # Inicialização
 # ---------------------------------------------------------------------------
 
-if __name__ == "__main__":
-    # Inicia thread de coleta em background (daemon=True para encerrar com o processo)
-    thread_coleta = threading.Thread(target=loop_coleta_metricas, daemon=True)
-    thread_coleta.start()
+# Inicia thread de coleta em background ao importar o módulo (necessário para gunicorn)
+_thread_coleta = threading.Thread(target=loop_coleta_metricas, daemon=True)
+_thread_coleta.start()
 
+if __name__ == "__main__":
     print("=" * 50)
     print("  Monitor de Sistema - Dashboard em Tempo Real")
     print("  Acesse: http://localhost:5000")
