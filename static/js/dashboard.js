@@ -28,6 +28,13 @@ let alertasConfig = { cpu: 80, ram: 80, disco: 80 };
 let charts = {};           // Referências às instâncias Chart.js
 let historicoLocal = [];   // Cache local do histórico
 
+// Seleção de partição no card de Disco
+let discoSelecionadoIdx = 0;
+// Seleção de partição no gráfico de Disco
+let chartDiscoSelecionadoIdx = 0;
+// Cache da última lista de partições recebida
+let _particoesCache = [];
+
 // ============================================================
 // Inicialização — aguarda o DOM estar pronto
 // ============================================================
@@ -36,6 +43,18 @@ document.addEventListener('DOMContentLoaded', () => {
   inicializarSliders();
   conectarWebSocket();
   buscarHistoricoInicial();
+
+  // Seletor de partição — card Disco
+  document.getElementById('disk-selector')?.addEventListener('change', (e) => {
+    discoSelecionadoIdx = parseInt(e.target.value) || 0;
+    if (_particoesCache.length > 0) _renderizarDisco(_particoesCache);
+  });
+
+  // Seletor de partição — gráfico Disco
+  document.getElementById('chart-disk-selector')?.addEventListener('change', (e) => {
+    chartDiscoSelecionadoIdx = parseInt(e.target.value) || 0;
+    _recalcularGraficoDisco();
+  });
 });
 
 // ============================================================
@@ -114,9 +133,10 @@ function atualizarDashboard(dados) {
   adicionarPontoGrafico('cpu',  ts, dados.cpu?.total ?? 0);
   adicionarPontoGrafico('ram',  ts, dados.ram?.percentual ?? 0);
 
-  // Usa a maior ocupação de disco para o gráfico
-  const maiorDisco = (dados.disco || []).reduce((max, p) => Math.max(max, p.percentual), 0);
-  adicionarPontoGrafico('disk', ts, maiorDisco);
+  // Usa a partição selecionada pelo usuário para o gráfico de disco
+  const disco = dados.disco || [];
+  const chartIdx = Math.min(chartDiscoSelecionadoIdx, Math.max(0, disco.length - 1));
+  adicionarPontoGrafico('disk', ts, disco[chartIdx]?.percentual ?? 0);
 }
 
 // ── CPU ───────────────────────────────────────────────────────
@@ -175,11 +195,42 @@ function atualizarRAM(ram) {
 // Armazena info de hardware de disco para enriquecer a lista de partições
 let _hardwareDiscos = [];
 
-function atualizarDisco(particoes) {
-  if (!particoes?.length) return;
+/** Popula os seletores de partição (card + gráfico) se o número de partições mudou. */
+function _popularSeletoresPartição(particoes) {
+  [
+    { id: 'disk-selector',       getIdx: () => discoSelecionadoIdx,       setIdx: (v) => { discoSelecionadoIdx = v; } },
+    { id: 'chart-disk-selector', getIdx: () => chartDiscoSelecionadoIdx,  setIdx: (v) => { chartDiscoSelecionadoIdx = v; } },
+  ].forEach(({ id, getIdx, setIdx }) => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
 
-  // Exibe a primeira partição no gauge principal
-  const principal = particoes[0];
+    // Só repopula se a contagem de partições mudou
+    if (sel.options.length === particoes.length) return;
+
+    const prevIdx = getIdx();
+    sel.innerHTML = particoes.map((p, idx) =>
+      `<option value="${idx}">${escapeHtml(p.ponto_montagem)} (${escapeHtml(p.sistema_arquivos || 'N/A')})</option>`
+    ).join('');
+
+    // Na primeira carga (prevIdx===0 e não há seleção manual), prefere C:\ ou /
+    let targetIdx = prevIdx < particoes.length ? prevIdx : 0;
+    if (prevIdx === 0 && sel.options.length > 1) {
+      const cIdx = particoes.findIndex(p =>
+        p.ponto_montagem.toUpperCase().startsWith('C:') ||
+        p.ponto_montagem === '/'
+      );
+      if (cIdx >= 0) targetIdx = cIdx;
+    }
+
+    sel.value = targetIdx;
+    setIdx(targetIdx);
+  });
+}
+
+/** Renderiza o gauge/detalhes do card de Disco usando `discoSelecionadoIdx`. */
+function _renderizarDisco(particoes) {
+  const idx = Math.min(discoSelecionadoIdx, particoes.length - 1);
+  const principal = particoes[idx];
   const pct = principal.percentual ?? 0;
   setGauge('disk', pct);
   setText('disk-pct',   pct.toFixed(1) + '%');
@@ -193,19 +244,19 @@ function atualizarDisco(particoes) {
   card?.classList.toggle('alert-active', alerta);
   if (badge) badge.classList.toggle('visible', alerta);
 
-  // Lista de todas as partições, com tipo de armazenamento se disponível
+  // Lista de todas as partições com tipo de armazenamento
   const listaEl = document.getElementById('disk-partitions');
   if (listaEl) {
-    // Tenta associar o primeiro drive físico com as partições (heurística simples:
-    // usa o drive[0] para todas as partições, pois psutil não mapeia partição→drive)
     const driveInfo = _hardwareDiscos.length > 0 ? _hardwareDiscos[0] : null;
     const tipoLabel = driveInfo ? ` · <span style="color:var(--disk-light);">${escapeHtml(driveInfo.tipo)}</span>` : '';
-    const modeloLabel = driveInfo ? `<div style="font-size:0.75rem;color:var(--text-sec);margin-top:0.15rem;">${escapeHtml(driveInfo.modelo || '')}</div>` : '';
+    const modeloLabel = driveInfo
+      ? `<div style="font-size:0.75rem;color:var(--text-sec);margin-top:0.15rem;">${escapeHtml(driveInfo.modelo || '')}</div>`
+      : '';
 
-    listaEl.innerHTML = particoes.map((p, idx) => `
+    listaEl.innerHTML = particoes.map((p, i) => `
       <div class="metric-detail-item" style="grid-column: span 2;">
-        <div class="detail-label">${escapeHtml(p.ponto_montagem)} (${escapeHtml(p.sistema_arquivos || 'N/A')})${idx === 0 ? tipoLabel : ''}</div>
-        ${idx === 0 ? modeloLabel : ''}
+        <div class="detail-label">${escapeHtml(p.ponto_montagem)} (${escapeHtml(p.sistema_arquivos || 'N/A')})${i === 0 ? tipoLabel : ''}</div>
+        ${i === 0 ? modeloLabel : ''}
         <div class="detail-value" style="margin-bottom:0.25rem">
           ${p.usado_gb} GB / ${p.total_gb} GB (${p.percentual}%)
         </div>
@@ -216,6 +267,14 @@ function atualizarDisco(particoes) {
       </div>
     `).join('');
   }
+}
+
+function atualizarDisco(particoes) {
+  if (!particoes?.length) return;
+
+  _particoesCache = particoes;
+  _popularSeletoresPartição(particoes);
+  _renderizarDisco(particoes);
 }
 
 // ── Hardware detalhado ────────────────────────────────────────
@@ -233,14 +292,27 @@ function atualizarHardware(hardware) {
   // Modelo do processador no card de CPU
   setText('cpu-hw-name', cpuLabel);
 
-  // RAM — sysinfo card e detalhe no card de RAM
+  // RAM — sysinfo card (tipo + velocidade combinados)
   const ramTipo = hardware.ram?.tipo ?? 'Desconhecido';
   const ramVel  = hardware.ram?.velocidade ?? '—';
   const ramLabel = ramTipo !== 'Desconhecido'
     ? (ramVel !== '—' ? `${ramTipo} • ${ramVel}` : ramTipo)
     : '—';
   setText('sys-ram-type', ramLabel);
-  setText('ram-hw-type',  ramLabel);
+
+  // RAM — card de métricas: campos separados
+  setText('ram-hw-type',  ramTipo !== 'Desconhecido' ? ramTipo : '—');
+  setText('ram-hw-speed', ramVel);
+
+  const slots = hardware.ram?.slots ?? [];
+  if (slots.length > 0) {
+    const detalhes = slots
+      .map((s, i) => `${i + 1}: ${s.capacidade_gb} GB`)
+      .join(' | ');
+    setText('ram-hw-slots', `${slots.length} slot${slots.length > 1 ? 's' : ''} — ${detalhes}`);
+  } else {
+    setText('ram-hw-slots', '—');
+  }
 
   // Discos — armazena para enriquecer a lista de partições
   _hardwareDiscos = hardware.discos ?? [];
@@ -385,9 +457,31 @@ function reconstruirGraficos(historico) {
     });
     adicionarPontoGrafico('cpu',  ts, item.cpu?.total ?? 0);
     adicionarPontoGrafico('ram',  ts, item.ram?.percentual ?? 0);
-    const maiorDisco = (item.disco || []).reduce((max, p) => Math.max(max, p.percentual), 0);
-    adicionarPontoGrafico('disk', ts, maiorDisco);
+    const disco = item.disco || [];
+    const chartIdx = Math.min(chartDiscoSelecionadoIdx, Math.max(0, disco.length - 1));
+    adicionarPontoGrafico('disk', ts, disco[chartIdx]?.percentual ?? 0);
   });
+}
+
+/** Reconstrói apenas o gráfico de disco com a partição selecionada. */
+function _recalcularGraficoDisco() {
+  const chart = charts.disk;
+  if (!chart) return;
+
+  chart.data.labels = [];
+  chart.data.datasets[0].data = [];
+
+  historicoLocal.forEach((item) => {
+    const ts = new Date(item.timestamp).toLocaleTimeString('pt-BR', {
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+    });
+    const disco = item.disco || [];
+    const chartIdx = Math.min(chartDiscoSelecionadoIdx, Math.max(0, disco.length - 1));
+    chart.data.labels.push(ts);
+    chart.data.datasets[0].data.push(disco[chartIdx]?.percentual ?? 0);
+  });
+
+  chart.update('none');
 }
 
 // ============================================================

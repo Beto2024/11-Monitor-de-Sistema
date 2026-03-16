@@ -77,14 +77,14 @@
           <div class="sysinfo-value" id="sys-uptime">—</div>
         </div>
       </div>
-      <div class="sysinfo-card">
+      <div class="sysinfo-card sysinfo-card-wide">
         <span class="sysinfo-icon">🔲</span>
         <div class="sysinfo-info">
           <div class="sysinfo-label">Processador</div>
           <div class="sysinfo-value" id="sys-cpu-name">—</div>
         </div>
       </div>
-      <div class="sysinfo-card">
+      <div class="sysinfo-card sysinfo-card-wide">
         <span class="sysinfo-icon">🧩</span>
         <div class="sysinfo-info">
           <div class="sysinfo-label">Memória</div>
@@ -184,6 +184,14 @@
             <span class="detail-label">Tipo</span>
             <span class="detail-value" id="ram-hw-type">—</span>
           </div>
+          <div class="metric-detail-item">
+            <span class="detail-label">Velocidade</span>
+            <span class="detail-value" id="ram-hw-speed">—</span>
+          </div>
+          <div class="metric-detail-item">
+            <span class="detail-label">Slots</span>
+            <span class="detail-value" id="ram-hw-slots">—</span>
+          </div>
         </div>
       </div>
 
@@ -194,6 +202,10 @@
             <span class="card-icon">🗄️</span> Disco
           </div>
           <span class="alert-badge" id="badge-disk">ALERTA</span>
+        </div>
+        <div class="disk-selector-wrapper">
+          <label class="detail-label" for="disk-selector">Partição:</label>
+          <select id="disk-selector" class="disk-selector"></select>
         </div>
         <div class="gauge-wrapper">
           <div class="gauge-container">
@@ -243,7 +255,10 @@
         <canvas id="chart-ram"></canvas>
       </div>
       <div class="chart-card">
-        <h3>🗄️ Disco (%)</h3>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+          <h3 style="margin-bottom:0;">🗄️ Disco (%)</h3>
+          <select id="chart-disk-selector" class="disk-selector" style="width:auto; min-width:120px;"></select>
+        </div>
         <canvas id="chart-disk"></canvas>
       </div>
     </div>
@@ -326,10 +341,9 @@
   </main><!-- /container -->
 
   <footer>
-    <p>Monitor de Sistema &mdash; Feito com 💜 usando Python, Flask, Socket.IO &amp; psutil</p>
-    <p style="margin-top:0.25rem;">
+    <p>
       <a href="https://github.com/Beto2024/11-Monitor-de-Sistema" target="_blank" rel="noopener">
-        GitHub
+        Monitor de Sistema
       </a>
     </p>
   </footer>
