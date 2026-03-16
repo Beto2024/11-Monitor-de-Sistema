@@ -447,6 +447,7 @@ def api_alertas_post():
 @socketio.on("connect")
 def ao_conectar():
     """Envia as métricas e configuração imediatamente ao conectar."""
+    iniciar_coleta()
     if historico_metricas:
         socketio.emit("metricas", historico_metricas[-1])
     socketio.emit("alertas_config", alertas_config)
@@ -463,9 +464,25 @@ def ao_solicitar_historico():
 # Inicialização
 # ---------------------------------------------------------------------------
 
-# Inicia thread de coleta em background ao importar o módulo (necessário para gunicorn)
-_thread_coleta = threading.Thread(target=loop_coleta_metricas, daemon=True)
-_thread_coleta.start()
+# Flag e lock para garantir que a coleta inicia apenas uma vez
+_coleta_iniciada = False
+_coleta_lock = threading.Lock()
+
+
+def iniciar_coleta():
+    """Inicia o loop de coleta de métricas em background."""
+    global _coleta_iniciada
+    with _coleta_lock:
+        if _coleta_iniciada:
+            return
+        _coleta_iniciada = True
+    try:
+        import eventlet
+        eventlet.spawn(loop_coleta_metricas)
+    except ImportError:
+        t = threading.Thread(target=loop_coleta_metricas, daemon=True)
+        t.start()
+
 
 if __name__ == "__main__":
     print("=" * 50)
@@ -473,4 +490,5 @@ if __name__ == "__main__":
     print("  Acesse: http://localhost:5000")
     print("=" * 50)
 
+    iniciar_coleta()
     socketio.run(app, host="0.0.0.0", port=5000, debug=False)
